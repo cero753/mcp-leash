@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, dirname } from "node:path";
 import { mergePolicy, sha256 } from "./policy.js";
 import { Store, readTrace } from "./store.js";
 import { replay, formatReplay } from "./replay.js";
@@ -96,7 +96,7 @@ async function main() {
   }
   if (cmd === "export" && o.chatnoir) {
     if (!arg) { console.error("usage: mcp-leash export --chatnoir <trace>"); return 2; }
-    const report = JSON.stringify(toChatNoir(readTrace(arg), resolve(arg)), null, 2) + "\n";
+    const report = JSON.stringify(toChatNoir(readTrace(arg), resolve(arg), dirname(resolve(arg))), null, 2) + "\n";
     if (o.out) writeFileSync(o.out, report, { flag: "wx" }); else process.stdout.write(report);
     return 0;
   }

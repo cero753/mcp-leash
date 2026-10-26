@@ -76,5 +76,6 @@ row("5. Tool description changed after pinning", `blocked=${/changed its descrip
 
 console.log(`\nTrace: ${trace}`);
 console.log(`Replay:  node src/cli.js replay "${trace}"`);
-console.log(`Export:  node src/cli.js export --chatnoir "${trace}"`);
+console.log(`Export:  node src/cli.js export --chatnoir "${trace}" -o "${join(work, "leash-report.json")}"`);
+console.log(`Check:   python <ChatNoir checkout>/chatnoir.py validate "${join(work, "leash-report.json")}"`);
 process.env.MCP_LEASH_DEMO_TRACE = trace;

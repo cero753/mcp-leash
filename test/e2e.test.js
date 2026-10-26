@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { readdirSync, statSync, writeFileSync } from "node:fs";
+import { readdirSync, statSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,12 @@ test("demo: injected write runs without mcp-leash and is held with it", () => {
   assert.equal(report.format, "chatnoir.report/v1");
   assert.equal(report.findings.length, 3);
   assert.deepEqual(report.findings.map((f) => f.rule_id).sort(), ["LEASH001", "LEASH001", "LEASH003"]);
+
+  // The CLI export must produce a repository-relative path even when run from another folder.
+  const cliOut = join(dirname(tracePath), "cli-report.json");
+  execFileSync(process.execPath, [join(root, "src", "cli.js"), "export", "--chatnoir", tracePath, "-o", cliOut], { cwd: root });
+  const cliReport = JSON.parse(readFileSync(cliOut, "utf8"));
+  assert.equal(cliReport.target.files[0].path, "trace.jsonl");
 
   // If a ChatNoir checkout is available, let its own validator judge the export.
   const chatnoir = process.env.CHATNOIR_PY;
