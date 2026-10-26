@@ -8,7 +8,7 @@ npx github:cero753/mcp-leash -- <your MCP server command>
 
 (Not on npm yet. `npm i -g github:cero753/mcp-leash` gives you a `mcp-leash` command.)
 
-Works with any stdio MCP host (Claude Code, Codex, Cursor). No account, no hosted service, one dependency (the MCP SDK).
+Tested with Claude Code. Any stdio MCP host should work (Codex, Cursor), but those are not tested yet. No account, no hosted service, one dependency (the MCP SDK).
 
 ## Why
 
@@ -62,7 +62,7 @@ So in this run the model was the first line of defense and mcp-leash the second.
 
 ## Replay a recorded session against a new policy
 
-Every call is appended to `~/.mcp-leash/trace.jsonl` (or `--trace FILE`). Before loosening a policy, replay real traffic through it:
+Every call is appended to `~/.mcp-leash/servers/<id>/trace.jsonl` (or `--trace FILE`). Each wrapped server gets its own folder, keyed by its command line, so pins, approvals and traces never mix between servers. Before loosening a policy, replay real traffic through it:
 
 ```sh
 mcp-leash replay trace.jsonl --policy looser.json
@@ -122,7 +122,7 @@ Other open-source MCP guards focus on description scanning and tool pinning. mcp
 ## Tests
 
 ```sh
-npm test                                           # 8 tests incl. the full demo
+npm test                                           # 9 tests incl. the full demo
 CHATNOIR_PY=/path/to/ChatNoir/chatnoir.py npm test # also validates the export with ChatNoir
 ```
 
