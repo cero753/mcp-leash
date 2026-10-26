@@ -33,3 +33,27 @@ test("demo: injected write runs without mcp-leash and is held with it", () => {
     assert.equal(v.status, 0, v.stderr);
   }
 });
+
+test("two wrapped servers with the same tool name keep separate pins and approvals", async () => {
+  const { Client } = await import("@modelcontextprotocol/sdk/client/index.js");
+  const { StdioClientTransport } = await import("@modelcontextprotocol/sdk/client/stdio.js");
+  const { mkdtempSync } = await import("node:fs");
+  const state = mkdtempSync(join(tmpdir(), "mcp-leash-ns-"));
+  const fixture = join(root, "demo", "inbox-server.js");
+  const cli = join(root, "src", "cli.js");
+  async function session(extra) {
+    const c = new Client({ name: "t", version: "0" });
+    await c.connect(new StdioClientTransport({ command: process.execPath, args: [cli, "--state", state, "--", process.execPath, fixture, ...extra] }));
+    await c.listTools();
+    const r = await c.callTool({ name: "read_messages", arguments: {} });
+    await c.close();
+    return r;
+  }
+  const a = await session([]);
+  const b = await session(["--variant", "b"]); // same tool name, different description
+  assert.ok(!a.isError);
+  assert.ok(!b.isError, "server B must not trip server A's pin for read_messages");
+  const dirs = readdirSync(join(state, "servers"));
+  assert.equal(dirs.length, 2);
+  for (const d of dirs) assert.ok(statSync(join(state, "servers", d, "pins.json")).isFile());
+});

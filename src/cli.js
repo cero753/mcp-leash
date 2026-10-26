@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync, readdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { mergePolicy } from "./policy.js";
+import { mergePolicy, sha256 } from "./policy.js";
 import { Store, readTrace } from "./store.js";
 import { replay, formatReplay } from "./replay.js";
 import { toChatNoir } from "./export.js";
@@ -35,6 +35,12 @@ function parse(argv) {
   return opts;
 }
 
+function serverStores(base) {
+  const dir = join(base, "servers");
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => new Store(join(dir, d.name)));
+}
+
 function loadPolicy(path) {
   return mergePolicy(path ? JSON.parse(readFileSync(path, "utf8")) : {});
 }
@@ -47,23 +53,41 @@ async function main() {
 
   if (o.server.length && !cmd) {
     const { runProxy } = await import("./proxy.js");
-    await runProxy({ command: o.server[0], args: o.server.slice(1), policy: loadPolicy(o.policy), stateDir, tracePath: o.trace ? resolve(o.trace) : undefined });
+    // Each wrapped server gets its own pins, approvals and trace, keyed by its command line,
+    // so two servers that both expose e.g. "search" never trip each other's pin check.
+    const serverDir = join(stateDir, "servers", sha256(JSON.stringify(o.server)).slice(0, 12));
+    const store = new Store(serverDir);
+    if (!existsSync(store.file("server.json"))) store.writeJson("server.json", { command: o.server });
+    await runProxy({ command: o.server[0], args: o.server.slice(1), policy: loadPolicy(o.policy), stateDir: serverDir, tracePath: o.trace ? resolve(o.trace) : undefined });
     return null; // keep running
   }
-  const store = new Store(stateDir);
+  const stores = serverStores(stateDir);
   if (cmd === "pending") {
-    const rows = Object.entries(store.approvals()).filter(([, v]) => v.status === "pending");
-    if (!rows.length) console.log("No held calls.");
-    for (const [k, v] of rows) console.log(`${k}  ${v.tool}  ${JSON.stringify(v.args).slice(0, 120)}\n      ${v.reason}`);
+    let n = 0;
+    for (const store of stores) {
+      const name = store.readJson("server.json", {}).command?.join(" ") ?? store.dir;
+      for (const [k, v] of Object.entries(store.approvals()).filter(([, v]) => v.status === "pending")) {
+        n++;
+        console.log(`${k}  ${v.tool}  ${JSON.stringify(v.args).slice(0, 120)}`);
+        console.log(`      ${v.reason}`);
+        console.log(`      server: ${name}`);
+      }
+    }
+    if (!n) console.log("No held calls.");
     return 0;
   }
   if (cmd === "approve") {
     if (!arg) { console.error("usage: mcp-leash approve <id>"); return 2; }
-    if (!store.approve(arg)) { console.error(`No held call with id ${arg}. Run mcp-leash pending.`); return 2; }
+    const store = stores.find((s) => s.approvals()[arg]?.status === "pending");
+    if (!store || !store.approve(arg)) { console.error(`No held call with id ${arg}. Run mcp-leash pending.`); return 2; }
     console.log(`Approved ${arg} once. Ask the agent to retry the same call.`);
     return 0;
   }
-  if (cmd === "repin") { rmSync(store.file("pins.json"), { force: true }); console.log("Pins cleared. Current tool descriptions will be pinned on next listing."); return 0; }
+  if (cmd === "repin") {
+    for (const store of stores) rmSync(store.file("pins.json"), { force: true });
+    console.log(`Pins cleared for ${stores.length} server(s). Current tool descriptions will be pinned on next listing.`);
+    return 0;
+  }
   if (cmd === "replay") {
     if (!arg) { console.error("usage: mcp-leash replay <trace>"); return 2; }
     const { text, loosened } = formatReplay(replay(readTrace(arg), loadPolicy(o.policy)));
